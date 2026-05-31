@@ -9,8 +9,8 @@ export default function Sidebar({ isOpen, onClose }){
     ].join(' ')}>
       <div className="mb-6 flex items-center justify-between gap-3 lg:mb-8 lg:justify-start">
         <div className="flex items-center gap-3">
-          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-cyan-500 via-sky-500 to-blue-600 text-sm font-bold text-white shadow-glow shadow-cyan-500/25">
-            M
+          <div className="flex h-12 w-12 items-center justify-center rounded-2xl shadow-glow shadow-cyan-500/25 overflow-hidden">
+            <img src="/images/Mistora.png" alt="Mistora logo" className="h-full w-full object-cover" />
           </div>
           <div>
             <div className="font-display text-xl font-bold tracking-tight text-slate-900 dark:text-white">Mistora</div>
