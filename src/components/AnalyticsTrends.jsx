@@ -1,45 +1,113 @@
-import React, {useMemo, useState, useEffect} from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import TrendChart from './TrendChart'
 import PageHeader from './PageHeader'
 import { db } from '../firebase'
-import { collection, query, where, orderBy, limit, getDocs, onSnapshot, Timestamp } from 'firebase/firestore'
+import { collection, doc, query, where, orderBy, limit, getDocs, onSnapshot, Timestamp } from 'firebase/firestore'
 import { defaultThresholds, normalizeThresholds, thresholdsDocRef } from '../lib/thresholds'
 
-function downsample(values, target){
-  if(!values || values.length === 0) return []
-  if(values.length <= target) return values.map(v => Number(v.toFixed ? v.toFixed(2) : Number(v)))
+function downsample(values, target) {
+  if (!values || values.length === 0) return []
+  if (values.length <= target) return values.map((value) => Number(value.toFixed ? value.toFixed(2) : Number(value)))
+
   const out = []
   const size = values.length / target
-  for(let i=0;i<target;i++){
-    const start = Math.floor(i * size)
-    let end = Math.floor((i+1) * size)
-    if(end <= start) end = start + 1
+
+  for (let index = 0; index < target; index += 1) {
+    const start = Math.floor(index * size)
+    let end = Math.floor((index + 1) * size)
+    if (end <= start) end = start + 1
+
     const slice = values.slice(start, Math.min(end, values.length))
-    const avg = slice.reduce((s,v)=>s+v,0)/slice.length
-    out.push(Number(avg.toFixed(2)))
+    const average = slice.reduce((sum, value) => sum + value, 0) / slice.length
+    out.push(Number(average.toFixed(2)))
   }
+
   return out
 }
 
-function asNumber(value){
+function asNumber(value) {
   if (typeof value === 'number' && Number.isFinite(value)) return value
   const parsed = Number(value)
   return Number.isFinite(parsed) ? parsed : null
 }
 
-function formatValue(value, unit, decimals = 1){
+function findNumericValue(source, preferredKeys) {
+  const queue = [source]
+  const seen = new Set()
+
+  while (queue.length > 0) {
+    const current = queue.shift()
+    if (current == null) continue
+
+    if (typeof current === 'number' || typeof current === 'string') {
+      const parsed = asNumber(current)
+      if (parsed != null) return parsed
+      continue
+    }
+
+    if (typeof current !== 'object') continue
+    if (seen.has(current)) continue
+    seen.add(current)
+
+    for (const key of preferredKeys) {
+      if (!Object.prototype.hasOwnProperty.call(current, key)) continue
+
+      const value = current[key]
+      const parsed = asNumber(value)
+      if (parsed != null) return parsed
+
+      if (value && typeof value === 'object') {
+        queue.push(value)
+      }
+    }
+  }
+
+  return null
+}
+
+function getReadingValue(reading, sensorKey) {
+  if (!reading) return null
+
+  const preferredKeys = sensorKey === 'airTemperature' || sensorKey === 'waterTemperature'
+    ? [sensorKey, 'value', 'temperature', 'temp', 'v', 'reading', 'data', 'payload']
+    : [sensorKey, 'value', 'v', 'reading', 'data', 'payload']
+
+  const extracted = findNumericValue(reading, preferredKeys)
+  if (extracted != null) return extracted
+
+  if (sensorKey === 'airTemperature' || sensorKey === 'waterTemperature') {
+    return asNumber(reading[sensorKey] ?? reading.value ?? reading.temperature ?? reading.v)
+  }
+
+  if (sensorKey === 'humidity') {
+    return asNumber(reading[sensorKey] ?? reading.value ?? reading.v)
+  }
+
+  if (sensorKey === 'tds') {
+    return asNumber(reading[sensorKey] ?? reading.value ?? reading.v)
+  }
+
+  return asNumber(reading[sensorKey] ?? reading.value ?? reading.v)
+}
+
+function buildSeries(readings, sensorKey, targetPoints) {
+  const values = (readings || []).map((reading) => getReadingValue(reading, sensorKey)).filter((value) => value != null)
+  return downsample(values, targetPoints)
+}
+
+function formatValue(value, unit, decimals = 1) {
   if (value == null || !Number.isFinite(value)) return '—'
   return `${Number(value.toFixed(decimals))}${unit ? ` ${unit}` : ''}`
 }
 
-function formatDelta(value, unit, decimals = 1){
+function formatDelta(value, unit, decimals = 1) {
   if (value == null || !Number.isFinite(value)) return '—'
   const rounded = Number(value.toFixed(decimals))
   const sign = rounded > 0 ? '+' : ''
   return `${sign}${rounded}${unit ? ` ${unit}` : ''}`
 }
 
-function getStatusLabel(latest, thresholds, delta, stableThreshold){
+function getStatusLabel(latest, thresholds, delta, stableThreshold) {
   if (latest == null || !Number.isFinite(latest)) return 'No data'
 
   const min = asNumber(thresholds?.min)
@@ -52,21 +120,21 @@ function getStatusLabel(latest, thresholds, delta, stableThreshold){
   return 'Stable'
 }
 
-function statusTone(status){
+function statusTone(status) {
   if (status === 'Above threshold' || status === 'Below threshold') return 'danger'
   if (status === 'Rising' || status === 'Falling') return 'warning'
   if (status === 'Stable') return 'stable'
   return 'neutral'
 }
 
-function toneClasses(tone){
+function toneClasses(tone) {
   if (tone === 'danger') return 'bg-rose-50 text-rose-700 ring-1 ring-rose-200/70 dark:bg-rose-500/10 dark:text-rose-200 dark:ring-rose-500/20'
   if (tone === 'warning') return 'bg-amber-50 text-amber-700 ring-1 ring-amber-200/70 dark:bg-amber-500/10 dark:text-amber-200 dark:ring-amber-500/20'
   if (tone === 'stable') return 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200/70 dark:bg-emerald-500/10 dark:text-emerald-200 dark:ring-emerald-500/20'
   return 'bg-slate-100 text-slate-600 ring-1 ring-slate-200/70 dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-700/70'
 }
 
-function buildInsight(label, latest, delta24h, thresholds, unit, stableThreshold){
+function buildInsight(label, latest, delta24h, thresholds, unit, stableThreshold) {
   if (latest == null || !Number.isFinite(latest)) return `${label} data is not available yet.`
 
   const min = asNumber(thresholds?.min)
@@ -90,20 +158,21 @@ function buildInsight(label, latest, delta24h, thresholds, unit, stableThreshold
   return `${label} is holding steady inside the target range. ${deltaText}.`
 }
 
-export default function AnalyticsTrends(){
+export default function AnalyticsTrends() {
   const ranges = [
-    {key: 'live', label: 'Live', points: 30},
-    {key: '1h', label: '1 hr', points: 60},
-    {key: '24h', label: '24 hrs', points: 96},
-    {key: '7d', label: '7 days', points: 168},
+    { key: 'live', label: 'Live', points: 30 },
+    { key: '1h', label: '1 hr', points: 60 },
+    { key: '24h', label: '24 hrs', points: 96 },
+    { key: '7d', label: '7 days', points: 168 },
   ]
 
   const [range, setRange] = useState('live')
-  const [readings, setReadings] = useState([])
+  const [rangeReadings, setRangeReadings] = useState([])
   const [summaryReadings, setSummaryReadings] = useState([])
+  const [liveLatestReading, setLiveLatestReading] = useState(null)
   const [thresholds, setThresholds] = useState(defaultThresholds)
 
-  const active = ranges.find(r => r.key === range) || ranges[0]
+  const active = ranges.find((item) => item.key === range) || ranges[0]
 
   useEffect(() => {
     const unsubscribe = onSnapshot(thresholdsDocRef, (snapshot) => {
@@ -121,16 +190,33 @@ export default function AnalyticsTrends(){
   }, [])
 
   useEffect(() => {
+    const latestReadingRef = doc(db, 'sensor_readings', 'latest')
+
+    const unsubscribe = onSnapshot(latestReadingRef, (snapshot) => {
+      if (!snapshot.exists()) {
+        setLiveLatestReading(null)
+        return
+      }
+
+      setLiveLatestReading({ id: snapshot.id, ...snapshot.data() })
+    }, () => {
+      setLiveLatestReading(null)
+    })
+
+    return unsubscribe
+  }, [])
+
+  useEffect(() => {
     const startDate = new Date(Date.now() - 24 * 60 * 60 * 1000)
-    const summaryQuery = query(
-      collection(db, 'sensor_readings'),
+
+    const q = query(
+      collection(db, 'sensor_readings', 'logs', 'history'),
       where('timestamp', '>=', Timestamp.fromDate(startDate)),
       orderBy('timestamp', 'asc'),
     )
 
-    const unsubscribe = onSnapshot(summaryQuery, (snapshot) => {
-      const docs = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }))
-      setSummaryReadings(docs)
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      setSummaryReadings(snapshot.docs.map((docSnapshot) => ({ id: docSnapshot.id, ...docSnapshot.data() })))
     }, () => {
       setSummaryReadings([])
     })
@@ -139,111 +225,138 @@ export default function AnalyticsTrends(){
   }, [])
 
   useEffect(() => {
-    let unsub = null
+    let cancelled = false
+
+    if (range === 'live') {
+      const q = query(
+        collection(db, 'sensor_readings', 'logs', 'history'),
+        orderBy('timestamp', 'desc'),
+        limit(active.points),
+      )
+
+      const unsubscribe = onSnapshot(q, (snapshot) => {
+        if (cancelled) return
+
+        const docs = snapshot.docs.map((docSnapshot) => ({ id: docSnapshot.id, ...docSnapshot.data() }))
+        setRangeReadings(docs.reverse())
+      }, () => {
+        if (cancelled) return
+        setRangeReadings([])
+      })
+
+      return () => {
+        cancelled = true
+        if (typeof unsubscribe === 'function') unsubscribe()
+      }
+    }
+
+    setRangeReadings([])
+
     const now = new Date()
     let startDate
 
-    if(range === 'live'){
-      // For live we subscribe to the latest N documents
-      const q = query(collection(db, 'sensor_readings'), orderBy('timestamp', 'desc'), limit(active.points))
-      unsub = onSnapshot(q, snap => {
-        const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }))
-        // snapshot is desc, reverse to asc
-        setReadings(docs.reverse())
-      })
-      return () => { if(unsub) unsub() }
-    }
-
-    // compute start date for other ranges
-    if(range === '1h') startDate = new Date(now.getTime() - 1 * 60 * 60 * 1000)
-    else if(range === '24h') startDate = new Date(now.getTime() - 24 * 60 * 60 * 1000)
-    else if(range === '7d') startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
+    if (range === '1h') startDate = new Date(now.getTime() - 1 * 60 * 60 * 1000)
+    else if (range === '24h') startDate = new Date(now.getTime() - 24 * 60 * 60 * 1000)
+    else if (range === '7d') startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
     else startDate = new Date(0)
 
     const q = query(
-      collection(db, 'sensor_readings'),
+      collection(db, 'sensor_readings', 'logs', 'history'),
       where('timestamp', '>=', Timestamp.fromDate(startDate)),
-      orderBy('timestamp', 'asc')
+      orderBy('timestamp', 'asc'),
     )
 
-    getDocs(q).then(snap => {
-      const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }))
-      setReadings(docs)
-    }).catch(() => setReadings([]))
+    getDocs(q)
+      .then((snapshot) => {
+        if (cancelled) return
+        setRangeReadings(snapshot.docs.map((docSnapshot) => ({ id: docSnapshot.id, ...docSnapshot.data() })))
+      })
+      .catch(() => {
+        if (cancelled) return
+        setRangeReadings([])
+      })
 
-    return () => { if(unsub) unsub() }
+    return () => {
+      cancelled = true
+    }
   }, [range, active.points])
 
-  const temperature = useMemo(() => {
-    const vals = readings.map(r => (typeof r.temperature === 'number' ? r.temperature : Number(r.temperature) || 0))
-    return downsample(vals, active.points)
-  }, [readings, active.points])
-
-  const humidity = useMemo(() => {
-    const vals = readings.map(r => (typeof r.humidity === 'number' ? r.humidity : Number(r.humidity) || 0))
-    return downsample(vals, active.points)
-  }, [readings, active.points])
-
-  const ec = useMemo(() => {
-    const vals = readings.map(r => (typeof r.ec === 'number' ? r.ec : Number(r.ec) || 0))
-    return downsample(vals, active.points)
-  }, [readings, active.points])
+  const temperature = useMemo(() => buildSeries(rangeReadings, 'airTemperature', active.points), [rangeReadings, active.points])
+  const humidity = useMemo(() => buildSeries(rangeReadings, 'humidity', active.points), [rangeReadings, active.points])
+  const waterTemp = useMemo(() => buildSeries(rangeReadings, 'waterTemperature', active.points), [rangeReadings, active.points])
+  const tds = useMemo(() => buildSeries(rangeReadings, 'tds', active.points), [rangeReadings, active.points])
 
   const latestReading = useMemo(() => {
-    if (readings.length > 0) return readings[readings.length - 1]
-    return summaryReadings.length > 0 ? summaryReadings[summaryReadings.length - 1] : null
-  }, [readings, summaryReadings])
+    if (liveLatestReading) return liveLatestReading
+    if (summaryReadings.length > 0) return summaryReadings[summaryReadings.length - 1]
+    if (rangeReadings.length > 0) return rangeReadings[rangeReadings.length - 1]
+    return null
+  }, [liveLatestReading, summaryReadings, rangeReadings])
 
   const dayWindow = useMemo(() => {
-    if (summaryReadings.length < 2) {
-      return { temp: null, humidity: null, ec: null }
+    const compute = (key) => {
+      if (summaryReadings.length < 2) return null
+
+      const first = getReadingValue(summaryReadings[0], key)
+      const last = getReadingValue(summaryReadings[summaryReadings.length - 1], key)
+      if (first == null || last == null) return null
+      return last - first
     }
 
-    const first = summaryReadings[0]
-    const last = summaryReadings[summaryReadings.length - 1]
-
     return {
-      temp: asNumber(last.temperature) - asNumber(first.temperature),
-      humidity: asNumber(last.humidity) - asNumber(first.humidity),
-      ec: asNumber(last.ec) - asNumber(first.ec),
+      airTemperature: compute('airTemperature'),
+      humidity: compute('humidity'),
+      waterTemperature: compute('waterTemperature'),
+      tds: compute('tds'),
     }
   }, [summaryReadings])
 
   const metricConfig = useMemo(() => ([
     {
-      key: 'temp',
-      title: 'Temperature',
+      key: 'airTemperature',
+      title: 'Air Temperature',
       unit: '°C',
       chartData: temperature,
-      currentValue: asNumber(latestReading?.temperature),
-      delta24h: dayWindow.temp,
-      thresholds: thresholds.temp,
+      currentValue: getReadingValue(latestReading, 'airTemperature'),
+      delta24h: dayWindow.airTemperature,
+      thresholds: thresholds.airTemperature,
       stableThreshold: 0.4,
-      colors: {lineStart: '#fb7185', lineEnd: '#ef4444', fill: '#fb7185'},
+      colors: { lineStart: '#fb7185', lineEnd: '#ef4444', fill: '#fb7185' },
     },
     {
       key: 'humidity',
       title: 'Humidity',
       unit: '%',
       chartData: humidity,
-      currentValue: asNumber(latestReading?.humidity),
+      currentValue: getReadingValue(latestReading, 'humidity'),
       delta24h: dayWindow.humidity,
       thresholds: thresholds.humidity,
       stableThreshold: 2,
-      colors: {lineStart: '#06b6d4', lineEnd: '#3b82f6', fill: '#06b6d4'},
+      colors: { lineStart: '#06b6d4', lineEnd: '#3b82f6', fill: '#06b6d4' },
     },
     {
-      key: 'ec',
-      title: 'EC (Electrical Conductivity)',
-      unit: 'mS/cm',
-      chartData: ec,
-      currentValue: asNumber(latestReading?.ec),
-      delta24h: dayWindow.ec,
-      thresholds: thresholds.ec,
-      stableThreshold: 0.05,
-      colors: {lineStart: '#10b981', lineEnd: '#059669', fill: '#10b981'},
+      key: 'waterTemperature',
+      title: 'Water Temperature',
+      unit: '°C',
+      chartData: waterTemp,
+      currentValue: getReadingValue(latestReading, 'waterTemperature'),
+      delta24h: dayWindow.waterTemperature,
+      thresholds: thresholds.waterTemperature,
+      stableThreshold: 0.4,
+      colors: { lineStart: '#06b6d4', lineEnd: '#3b82f6', fill: '#06b6d4' },
     },
-  ]), [temperature, humidity, ec, latestReading, dayWindow, thresholds])
+    {
+      key: 'tds',
+      title: 'TDS',
+      unit: 'ppm',
+      chartData: tds,
+      currentValue: getReadingValue(latestReading, 'tds'),
+      delta24h: dayWindow.tds,
+      thresholds: thresholds.tds,
+      stableThreshold: 5,
+      colors: { lineStart: '#10b981', lineEnd: '#059669', fill: '#10b981' },
+    },
+  ]), [temperature, humidity, waterTemp, tds, latestReading, dayWindow, thresholds])
 
   const kpiCards = useMemo(() => metricConfig.map((metric) => {
     const status = getStatusLabel(metric.currentValue, metric.thresholds, metric.delta24h, metric.stableThreshold)
@@ -271,7 +384,7 @@ export default function AnalyticsTrends(){
       <PageHeader
         label="Analytics view"
         title="Trends & Analytics"
-        subtitle="Track temperature, humidity, and EC across live and historical windows with threshold context and automated summaries."
+        subtitle="Track air and water temperature, humidity, and TDS across live and historical windows with threshold context and automated summaries."
       />
 
       <div className="dashboard-card-soft rounded-3xl p-4 sm:p-5">
@@ -282,7 +395,7 @@ export default function AnalyticsTrends(){
           </div>
         </div>
 
-        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           {kpiCards.map((metric) => (
             <article key={metric.key} className="rounded-2xl border border-slate-200/70 bg-white/85 p-4 shadow-sm dark:border-slate-800/70 dark:bg-slate-950/40">
               <div className="flex items-start justify-between gap-3">
@@ -321,15 +434,15 @@ export default function AnalyticsTrends(){
             </div>
             <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center sm:justify-end sm:gap-3">
               <div className="rounded-full bg-slate-100/70 p-1 shadow-sm dark:bg-slate-800/50">
-                {ranges.map((r) => (
+                {ranges.map((item) => (
                   <button
-                    key={r.key}
-                    onClick={() => setRange(r.key)}
-                    className={`rounded-full px-3 py-1.5 text-xs font-medium transition sm:px-4 sm:text-sm ${r.key === range ? 'bg-white text-slate-900 shadow dark:bg-slate-700 dark:text-slate-100' : 'text-slate-600 hover:bg-white/60 dark:text-slate-300 dark:hover:bg-slate-700/60'}`}
-                    aria-pressed={r.key === range}
-                    aria-label={`Show ${r.label}`}
+                    key={item.key}
+                    onClick={() => setRange(item.key)}
+                    className={`rounded-full px-3 py-1.5 text-xs font-medium transition sm:px-4 sm:text-sm ${item.key === range ? 'bg-white text-slate-900 shadow dark:bg-slate-700 dark:text-slate-100' : 'text-slate-600 hover:bg-white/60 dark:text-slate-300 dark:hover:bg-slate-700/60'}`}
+                    aria-pressed={item.key === range}
+                    aria-label={`Show ${item.label}`}
                   >
-                    {r.label}
+                    {item.label}
                   </button>
                 ))}
               </div>
@@ -342,7 +455,7 @@ export default function AnalyticsTrends(){
 
           <p className="text-xs text-slate-500 dark:text-slate-400">Visual safe, warning, and critical zones</p>
 
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 2xl:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             {metricConfig.map((metric) => {
               const status = getStatusLabel(metric.currentValue, metric.thresholds, metric.delta24h, metric.stableThreshold)
 

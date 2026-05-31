@@ -15,15 +15,17 @@ const formatNumber = (value) => {
 
 export const createThresholdChangeLog = (previousThresholds, nextThresholds) => {
   const sensorLabels = {
-    temp: 'Temperature',
+    airTemperature: 'Air Temperature',
     humidity: 'Humidity',
-    ec: 'EC',
+    waterTemperature: 'Water Temperature',
+    tds: 'TDS',
   }
 
   const units = {
-    temp: 'deg C',
+    airTemperature: 'deg C',
     humidity: '%',
-    ec: 'mS/cm',
+    waterTemperature: 'deg C',
+    tds: 'ppm',
   }
 
   const changes = []

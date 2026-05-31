@@ -1,9 +1,10 @@
 import React from 'react'
 
 const sensorConfig = [
-  { key: 'temp', label: 'Temperature', unit: '°C', step: '0.1', min: '-20', max: '60' },
+  { key: 'airTemperature', label: 'Air Temperature', unit: '°C', step: '0.1', min: '-20', max: '60' },
   { key: 'humidity', label: 'Humidity', unit: '%', step: '1', min: '0', max: '100' },
-  { key: 'ec', label: 'EC', unit: 'mS/cm', step: '0.01', min: '0', max: '10' },
+  { key: 'waterTemperature', label: 'Water Temperature', unit: '°C', step: '0.1', min: '-20', max: '60' },
+  { key: 'tds', label: 'TDS', unit: 'ppm', step: '1', min: '0', max: '5000' },
 ]
 
 export default function ThresholdCard({

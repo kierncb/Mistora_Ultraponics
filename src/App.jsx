@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react'
+import { doc, onSnapshot } from 'firebase/firestore'
 import Sidebar from './components/Sidebar'
 import Topbar from './components/Topbar'
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
@@ -6,9 +7,21 @@ import Overview from './pages/Overview'
 import Trends from './pages/Trends'
 import Controls from './pages/Controls'
 import About from './pages/About'
+import { db } from './firebase'
+
+
+function toDate(value) {
+  if (!value) return null
+  if (typeof value.toDate === 'function') return value.toDate()
+  if (value instanceof Date) return value
+
+  const parsed = new Date(value)
+  return Number.isNaN(parsed.getTime()) ? null : parsed
+}
 
 export default function App(){
   const location = useLocation()
+  const [lastTransmissionAt, setLastTransmissionAt] = useState(null)
   const [theme, setTheme] = useState(() => {
     if (typeof window === 'undefined') {
       return 'light'
@@ -32,6 +45,21 @@ export default function App(){
     setSidebarOpen(false)
   }, [location.pathname])
 
+  useEffect(() => {
+    const latestReadingRef = doc(db, 'sensor_readings', 'latest')
+
+    const unsubscribe = onSnapshot(latestReadingRef, (snapshot) => {
+      if (!snapshot.exists()) return
+
+      const timestamp = toDate(snapshot.data()?.timestamp)
+      if (!timestamp) return
+
+      setLastTransmissionAt(timestamp)
+    })
+
+    return unsubscribe
+  }, [])
+
   const toggleTheme = () => {
     setTheme((currentTheme) => (currentTheme === 'dark' ? 'light' : 'dark'))
   }
@@ -53,6 +81,7 @@ export default function App(){
           theme={theme}
           onToggleTheme={toggleTheme}
           onOpenSidebar={() => setSidebarOpen(true)}
+          lastTransmissionAt={lastTransmissionAt}
         />
         <main className="animate-soft-rise flex-1 px-4 py-5 pb-8 sm:px-6 sm:py-6 lg:px-8 lg:py-8">
           <Routes>

@@ -147,23 +147,27 @@ export default function Controls(){
         subtitle="Toggle devices, adjust setpoints, and schedule actions."
       />
 
-      <ThresholdCard
-        thresholds={thresholds}
-        onThresholdChange={handleThresholdChange}
-        onSave={handleSaveThresholds}
-        onCancel={handleCancelThresholds}
-        onReset={handleResetThresholds}
-        isLoading={isLoadingThresholds}
-        isSaving={isSavingThresholds}
-        saveState={saveState}
-        saveError={saveError}
-      />
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)] lg:items-start">
+        <ThresholdCard
+          thresholds={thresholds}
+          onThresholdChange={handleThresholdChange}
+          onSave={handleSaveThresholds}
+          onCancel={handleCancelThresholds}
+          onReset={handleResetThresholds}
+          isLoading={isLoadingThresholds}
+          isSaving={isSavingThresholds}
+          saveState={saveState}
+          saveError={saveError}
+        />
 
-      <ControlPanel
-        isAuto={isAuto}
-        onToggleAutoMode={handleToggleAutoMode}
-        onManualMist={handleManualMist}
-      />
+        <div className="h-full">
+          <ControlPanel
+            isAuto={isAuto}
+            onToggleAutoMode={handleToggleAutoMode}
+            onManualMist={handleManualMist}
+          />
+        </div>
+      </div>
     </section>
   )
 }

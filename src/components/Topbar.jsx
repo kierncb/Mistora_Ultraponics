@@ -1,6 +1,22 @@
 import React, { useEffect, useState } from 'react'
 
-export default function Topbar({ theme, onToggleTheme, onOpenSidebar, espOnline = true }){
+function formatTransmissionAgo(date){
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) return 'No transmission yet'
+
+  const diffMs = Date.now() - date.getTime()
+  const diffMinutes = Math.max(0, Math.floor(diffMs / 60000))
+
+  if (diffMinutes < 1) return 'transmitted data just now'
+  if (diffMinutes < 60) return `transmitted data ${diffMinutes}m ago`
+
+  const diffHours = Math.floor(diffMinutes / 60)
+  if (diffHours < 24) return `transmitted data ${diffHours}h ago`
+
+  const diffDays = Math.floor(diffHours / 24)
+  return `transmitted data ${diffDays}d ago`
+}
+
+export default function Topbar({ theme, onToggleTheme, onOpenSidebar, lastTransmissionAt = null }){
   const [now, setNow] = useState(() => new Date().toLocaleTimeString([], {
     hour: '2-digit',
     minute: '2-digit',
@@ -18,6 +34,9 @@ export default function Topbar({ theme, onToggleTheme, onOpenSidebar, espOnline 
 
     return () => window.clearInterval(timer)
   }, [])
+
+  const transmissionLabel = formatTransmissionAgo(lastTransmissionAt)
+  const isRecentTransmission = lastTransmissionAt instanceof Date && Number.isFinite(lastTransmissionAt.getTime()) && (Date.now() - lastTransmissionAt.getTime()) < 5 * 60 * 1000
 
   return (
     <header className="sticky top-0 z-30 border-b border-slate-200/70 bg-white/65 px-4 py-3 backdrop-blur-2xl dark:border-slate-800 dark:bg-slate-950/65 sm:px-6 sm:py-4 lg:px-8">
@@ -38,9 +57,9 @@ export default function Topbar({ theme, onToggleTheme, onOpenSidebar, espOnline 
         </div>
 
         <div className="flex flex-wrap items-center justify-end gap-2 sm:gap-3">
-          <div className={`flex items-center gap-2 rounded-2xl border px-3 py-2 text-xs font-medium sm:text-sm ${espOnline ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-300' : 'border-slate-200 bg-slate-50 text-slate-600 dark:border-slate-800 dark:bg-slate-900/80 dark:text-slate-300'}`}>
-            <span className={`h-2.5 w-2.5 rounded-full ${espOnline ? 'bg-emerald-500 shadow-[0_0_0_4px_rgba(34,197,94,0.15)]' : 'bg-slate-400'}`} />
-            {espOnline ? 'ESP32 Online' : 'ESP32 Offline'}
+          <div className={`flex items-center gap-2 rounded-2xl border px-3 py-2 text-xs font-medium sm:text-sm ${isRecentTransmission ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-300' : 'border-slate-200 bg-slate-50 text-slate-600 dark:border-slate-800 dark:bg-slate-900/80 dark:text-slate-300'}`}>
+            <span className={`h-2.5 w-2.5 rounded-full ${isRecentTransmission ? 'bg-emerald-500 shadow-[0_0_0_4px_rgba(34,197,94,0.15)]' : 'bg-slate-400'}`} />
+            ESP32 {transmissionLabel}
           </div>
 
           <div className="hidden rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm text-slate-600 dark:border-slate-800 dark:bg-slate-900/80 dark:text-slate-300 sm:block">
