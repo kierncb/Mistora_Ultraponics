@@ -1,11 +1,13 @@
 import { initializeApp } from 'firebase/app'
 import { getAuth, signInAnonymously } from 'firebase/auth'
+import { getDatabase } from 'firebase/database'
 import { getFirestore } from 'firebase/firestore'
 import { getStorage } from 'firebase/storage'
 
 const firebaseConfig = {
   apiKey: 'AIzaSyDKW78SpOM7nXhKKvwTTLOigBsvcTc0HWc',
   authDomain: 'mistora-fb941.firebaseapp.com',
+  databaseURL: 'https://mistora-fb941-default-rtdb.firebaseio.com',
   projectId: 'mistora-fb941',
   storageBucket: 'mistora-fb941.firebasestorage.app',
   messagingSenderId: '1030181457819',
@@ -15,6 +17,7 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig)
 
 const auth = getAuth(app)
+const database = getDatabase(app)
 const db = getFirestore(app)
 const storage = getStorage(app)
 
@@ -24,4 +27,4 @@ const storage = getStorage(app)
 // sign-in under Firebase Console > Authentication > Sign-in method.
 signInAnonymously(auth).catch(() => {})
 
-export { app, auth, db, storage }
+export { app, auth, database, db, storage }

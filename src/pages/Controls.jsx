@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from 'react'
+import { ref, set } from 'firebase/database'
 import { getDoc, serverTimestamp, setDoc } from 'firebase/firestore'
 import ControlPanel from '../components/ControlPanel'
 import ThresholdCard from '../components/ThresholdCard'
 import PageHeader from '../components/PageHeader'
 import { createThresholdChangeLog, writeActivityLog } from '../lib/activityLog'
 import { cloneThresholds, defaultThresholds, normalizeThresholds, thresholdsDocRef } from '../lib/thresholds'
+import { database } from '../firebase'
 
 export default function Controls(){
   const [isAuto, setIsAuto] = useState(true)
@@ -112,10 +114,11 @@ export default function Controls(){
   }
 
   const handleToggleAutoMode = () => {
-    setIsAuto((currentMode) => {
-      const nextMode = !currentMode
+    const nextMode = !isAuto
+    setIsAuto(nextMode)
 
-      void writeActivityLog({
+    void set(ref(database, 'controls/auto_mode'), nextMode ? 1 : 0)
+      .then(() => writeActivityLog({
         type: 'mode_change',
         severity: 'info',
         title: nextMode ? 'Auto mode enabled' : 'Auto mode disabled',
@@ -125,23 +128,28 @@ export default function Controls(){
         metadata: {
           mode: nextMode ? 'auto' : 'manual',
         },
-      }).catch(() => {})
-
-      return nextMode
-    })
+      }).catch(() => {}))
+      .catch(() => {
+        setIsAuto((currentMode) => !currentMode)
+      })
   }
 
   const handleManualMist = () => {
-    void writeActivityLog({
-      type: 'mist_cycle',
-      severity: 'warning',
-      title: 'Manual mist cycle',
-      detail: 'Operator triggered a 15-second mist cycle from the control panel.',
-      metadata: {
-        durationSeconds: 15,
-        modeAtTrigger: isAuto ? 'auto' : 'manual',
-      },
-    }).catch(() => {})
+    const commandValue = Date.now()
+
+    void set(ref(database, 'controls/mist_now'), commandValue)
+      .then(() => writeActivityLog({
+        type: 'mist_cycle',
+        severity: 'warning',
+        title: 'Manual mist cycle',
+        detail: 'Operator triggered a 15-second mist cycle from the control panel.',
+        metadata: {
+          durationSeconds: 15,
+          modeAtTrigger: isAuto ? 'auto' : 'manual',
+          commandValue,
+        },
+      }).catch(() => {}))
+      .catch(() => {})
   }
 
   return (
