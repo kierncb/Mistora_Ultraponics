@@ -69,6 +69,11 @@ export default function Controls(){
     setSaveState('idle')
 
     try {
+      if (JSON.stringify(savedThresholds) === JSON.stringify(thresholds)) {
+        setSaveState('saved')
+        return
+      }
+
       const thresholdChangeLog = createThresholdChangeLog(savedThresholds, thresholds)
 
       await setDoc(thresholdsDocRef, {

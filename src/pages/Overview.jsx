@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { collection, limit, onSnapshot, orderBy, query } from 'firebase/firestore'
+import { collection, getDocs, limit, orderBy, query } from 'firebase/firestore'
 import SensorCard from '../components/SensorCard'
 import PageHeader from '../components/PageHeader'
 import { db } from '../firebase'
@@ -95,28 +95,37 @@ export default function Overview(){
       limit(1),
     )
 
-    const unsubscribe = onSnapshot(latestLogQuery, (snapshot) => {
-      const logDoc = snapshot.docs[0]
+    let cancelled = false
 
-      if (!logDoc) {
-        setLatestLog(null)
-        return
-      }
+    getDocs(latestLogQuery)
+      .then((snapshot) => {
+        if (cancelled) return
 
-      const logData = logDoc.data()
-      setLatestLog({
-        id: logDoc.id,
-        title: logData.title || 'System event',
-        detail: logData.detail || 'No details available.',
-        type: logData.type || 'event',
-        severity: logData.severity || 'info',
-        createdAt: toDate(logData.createdAt),
+        const logDoc = snapshot.docs[0]
+
+        if (!logDoc) {
+          setLatestLog(null)
+          return
+        }
+
+        const logData = logDoc.data()
+        setLatestLog({
+          id: logDoc.id,
+          title: logData.title || 'System event',
+          detail: logData.detail || 'No details available.',
+          type: logData.type || 'event',
+          severity: logData.severity || 'info',
+          createdAt: toDate(logData.createdAt),
+        })
       })
-    }, () => {
-      setLatestLog(null)
-    })
+      .catch(() => {
+        if (cancelled) return
+        setLatestLog(null)
+      })
 
-    return unsubscribe
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   const sensors = useMemo(() => sensorDefs.map((sensor) => ({

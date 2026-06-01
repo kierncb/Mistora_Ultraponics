@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react'
 import TrendChart from './TrendChart'
 import PageHeader from './PageHeader'
 import { db } from '../firebase'
-import { collection, limit, onSnapshot, orderBy, query } from 'firebase/firestore'
+import { collection, getDocs, limit, orderBy, query } from 'firebase/firestore'
 import { useFirestoreDashboard } from '../context/FirestoreDashboardContext'
 import { loadTrendWindow, loadTwentyFourHourSummary } from '../lib/readingSummaries'
 
@@ -30,6 +30,15 @@ function asNumber(value) {
   if (typeof value === 'number' && Number.isFinite(value)) return value
   const parsed = Number(value)
   return Number.isFinite(parsed) ? parsed : null
+}
+
+function toDate(value) {
+  if (!value) return null
+  if (typeof value.toDate === 'function') return value.toDate()
+  if (value instanceof Date) return value
+
+  const parsed = new Date(value)
+  return Number.isNaN(parsed.getTime()) ? null : parsed
 }
 
 function findNumericValue(source, preferredKeys) {
@@ -202,19 +211,20 @@ export default function AnalyticsTrends() {
         limit(active.points),
       )
 
-      const unsubscribe = onSnapshot(q, (snapshot) => {
-        if (cancelled) return
+      getDocs(q)
+        .then((snapshot) => {
+          if (cancelled) return
 
-        const docs = snapshot.docs.map((docSnapshot) => ({ id: docSnapshot.id, ...docSnapshot.data() }))
-        setRangeReadings(docs.reverse())
-      }, () => {
-        if (cancelled) return
-        setRangeReadings([])
-      })
+          const docs = snapshot.docs.map((docSnapshot) => ({ id: docSnapshot.id, ...docSnapshot.data() }))
+          setRangeReadings(docs.reverse())
+        })
+        .catch(() => {
+          if (cancelled) return
+          setRangeReadings([])
+        })
 
       return () => {
         cancelled = true
-        if (typeof unsubscribe === 'function') unsubscribe()
       }
     }
 
@@ -234,6 +244,24 @@ export default function AnalyticsTrends() {
       cancelled = true
     }
   }, [range, active.points])
+
+  useEffect(() => {
+    if (range !== 'live' || !sharedLatestReading) return
+
+    const latestTimestamp = toDate(sharedLatestReading.timestamp)?.getTime()
+    if (latestTimestamp == null) return
+
+    setRangeReadings((current) => {
+      const currentLatest = current[current.length - 1]
+      const currentTimestamp = toDate(currentLatest?.timestamp)?.getTime()
+
+      if (currentTimestamp != null && latestTimestamp <= currentTimestamp) {
+        return current
+      }
+
+      return [...current, sharedLatestReading].slice(-active.points)
+    })
+  }, [range, sharedLatestReading, active.points])
 
   const temperature = useMemo(() => buildSeries(rangeReadings, 'airTemperature', active.points), [rangeReadings, active.points])
   const humidity = useMemo(() => buildSeries(rangeReadings, 'humidity', active.points), [rangeReadings, active.points])
