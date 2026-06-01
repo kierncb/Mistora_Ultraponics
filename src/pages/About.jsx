@@ -3,7 +3,7 @@ import PageHeader from '../components/PageHeader'
 
 const teamMembers = [
   { name: 'Baladad, Kier Nino', role: 'Software Development', focus: 'System concept, interface direction, and final integration.', photo: '/images/Baladad.jpg' },
-  { name: 'Bubos, Cefren Pao', role: 'Prototype Development', focus: 'Embedded logic, control routines, and sensor updates.' },
+  { name: 'Bubos, Cefren Pao', role: 'Prototype Development', focus: 'Embedded logic, control routines, and sensor updates.', photo: '/images/Bubos.jpg' },
   { name: 'Codilan, Ralph Lorenz', role: 'Technical and Documentation', focus: 'Embedded logic, control routines, and sensor updates.', photo: '/images/Codilan.png' },
   { name: 'Corcino, Daniel Justine', role: 'Technical and Documentation', focus: 'Sensor wiring, device reliability, and ESP32 coordination.', photo: '/images/Corcino.png' },
   { name: 'De Mesa, Charisse Anne', role: 'Prototype Development', focus: 'Layout refinement, visual hierarchy, and screen polish.', photo: '/images/De Mesa.png' },
