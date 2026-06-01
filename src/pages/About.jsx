@@ -6,10 +6,10 @@ const teamMembers = [
   { name: 'Bubos, Cefren Pao', role: 'Prototype Development', focus: 'Embedded logic, control routines, and sensor updates.' },
   { name: 'Codilan, Ralph Lorenz', role: 'Technical and Documentation', focus: 'Embedded logic, control routines, and sensor updates.', photo: '/images/Codilan.png' },
   { name: 'Corcino, Daniel Justine', role: 'Technical and Documentation', focus: 'Sensor wiring, device reliability, and ESP32 coordination.', photo: '/images/Corcino.png' },
-  { name: 'De Mesa, Charisse Anne', role: 'Prototype Development', focus: 'Layout refinement, visual hierarchy, and screen polish.' },
+  { name: 'De Mesa, Charisse Anne', role: 'Prototype Development', focus: 'Layout refinement, visual hierarchy, and screen polish.', photo: '/images/De Mesa.png' },
   { name: 'Gerona, Geonell', role: 'Prototype Development', focus: 'Trend interpretation, thresholds, and summary reporting.' },
   { name: 'Lagrimas, Angelo', role: 'Software Development', focus: 'Firestore structure, persistence, and app data flow.', photo: '/images/Lagrimas.png' },
-  { name: 'Lazona, John Karlo', role: 'Prototype Development', focus: 'Project write-up, presentation support, and references.' },
+  { name: 'Lazona, John Karlo', role: 'Prototype Development', focus: 'Project write-up, presentation support, and references.', photo: '/images/Lazona.jpg' },
   { name: 'Navea, Carl Timothy', role: 'Prototype Development', focus: 'Background study, proposal framing, and demo preparation.', photo: '/images/Navea.jpg' },
 ]
 
@@ -41,7 +41,7 @@ export default function About(){
       <PageHeader
         label="Project Team"
         title="About the Group"
-        subtitle="A polished team profile for the people behind the system."
+        subtitle="The creative minds and technical experts behind the system’s success."
       />
 
       <div className="dashboard-card-soft overflow-hidden p-5 sm:p-6">
