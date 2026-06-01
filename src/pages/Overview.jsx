@@ -1,9 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { collection, doc, limit, onSnapshot, orderBy, query } from 'firebase/firestore'
+import { collection, limit, onSnapshot, orderBy, query } from 'firebase/firestore'
 import SensorCard from '../components/SensorCard'
 import PageHeader from '../components/PageHeader'
 import { db } from '../firebase'
-import { defaultThresholds, normalizeThresholds, thresholdsDocRef } from '../lib/thresholds'
+import { useFirestoreDashboard } from '../context/FirestoreDashboardContext'
 
 
 const sensorDefs = [
@@ -85,41 +85,8 @@ const formatEventDate = (createdAt) => {
 }
 
 export default function Overview(){
-  const [latestReading, setLatestReading] = useState(null)
   const [latestLog, setLatestLog] = useState(null)
-  const [thresholds, setThresholds] = useState(defaultThresholds)
-
-  useEffect(() => {
-    const unsubscribe = onSnapshot(thresholdsDocRef, (snapshot) => {
-      if (!snapshot.exists()) {
-        setThresholds(defaultThresholds)
-        return
-      }
-
-      setThresholds(normalizeThresholds(snapshot.data().thresholds))
-    }, () => {
-      setThresholds(defaultThresholds)
-    })
-
-    return unsubscribe
-  }, [])
-
-  useEffect(() => {
-    const latestReadingRef = doc(db, 'sensor_readings', 'latest')
-
-    const unsubscribe = onSnapshot(latestReadingRef, (snapshot) => {
-      if (!snapshot.exists()) {
-        setLatestReading(null)
-        return
-      }
-
-      setLatestReading({ id: snapshot.id, ...snapshot.data() })
-    }, () => {
-      setLatestReading(null)
-    })
-
-    return unsubscribe
-  }, [])
+  const { latestReading, thresholds } = useFirestoreDashboard()
 
   useEffect(() => {
     const latestLogQuery = query(

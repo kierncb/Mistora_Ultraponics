@@ -1,5 +1,4 @@
-import React, { useEffect, useState } from 'react'
-import { doc, onSnapshot } from 'firebase/firestore'
+import React, { useEffect, useMemo, useState } from 'react'
 import Sidebar from './components/Sidebar'
 import Topbar from './components/Topbar'
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
@@ -7,7 +6,7 @@ import Overview from './pages/Overview'
 import Trends from './pages/Trends'
 import Controls from './pages/Controls'
 import About from './pages/About'
-import { db } from './firebase'
+import { useFirestoreDashboard } from './context/FirestoreDashboardContext'
 
 
 function toDate(value) {
@@ -21,7 +20,7 @@ function toDate(value) {
 
 export default function App(){
   const location = useLocation()
-  const [lastTransmissionAt, setLastTransmissionAt] = useState(null)
+  const { latestReading } = useFirestoreDashboard()
   const [theme, setTheme] = useState(() => {
     if (typeof window === 'undefined') {
       return 'light'
@@ -45,20 +44,7 @@ export default function App(){
     setSidebarOpen(false)
   }, [location.pathname])
 
-  useEffect(() => {
-    const latestReadingRef = doc(db, 'sensor_readings', 'latest')
-
-    const unsubscribe = onSnapshot(latestReadingRef, (snapshot) => {
-      if (!snapshot.exists()) return
-
-      const timestamp = toDate(snapshot.data()?.timestamp)
-      if (!timestamp) return
-
-      setLastTransmissionAt(timestamp)
-    })
-
-    return unsubscribe
-  }, [])
+  const lastTransmissionAt = useMemo(() => toDate(latestReading?.timestamp), [latestReading])
 
   const toggleTheme = () => {
     setTheme((currentTheme) => (currentTheme === 'dark' ? 'light' : 'dark'))

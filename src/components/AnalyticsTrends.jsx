@@ -2,8 +2,9 @@ import React, { useEffect, useMemo, useState } from 'react'
 import TrendChart from './TrendChart'
 import PageHeader from './PageHeader'
 import { db } from '../firebase'
-import { collection, doc, query, where, orderBy, limit, getDocs, onSnapshot, Timestamp } from 'firebase/firestore'
-import { defaultThresholds, normalizeThresholds, thresholdsDocRef } from '../lib/thresholds'
+import { collection, limit, onSnapshot, orderBy, query } from 'firebase/firestore'
+import { useFirestoreDashboard } from '../context/FirestoreDashboardContext'
+import { loadTrendWindow, loadTwentyFourHourSummary } from '../lib/readingSummaries'
 
 function downsample(values, target) {
   if (!values || values.length === 0) return []
@@ -161,67 +162,34 @@ function buildInsight(label, latest, delta24h, thresholds, unit, stableThreshold
 export default function AnalyticsTrends() {
   const ranges = [
     { key: 'live', label: 'Live', points: 30 },
-    { key: '1h', label: '1 hr', points: 60 },
-    { key: '24h', label: '24 hrs', points: 96 },
-    { key: '7d', label: '7 days', points: 168 },
+    { key: '1h', label: '1 hr', points: 12 },
+    { key: '24h', label: '24 hrs', points: 24 },
+    { key: '7d', label: '7 days', points: 7 },
   ]
 
   const [range, setRange] = useState('live')
   const [rangeReadings, setRangeReadings] = useState([])
-  const [summaryReadings, setSummaryReadings] = useState([])
-  const [liveLatestReading, setLiveLatestReading] = useState(null)
-  const [thresholds, setThresholds] = useState(defaultThresholds)
+  const [twentyFourHourReadings, setTwentyFourHourReadings] = useState([])
+  const { latestReading: sharedLatestReading, thresholds } = useFirestoreDashboard()
 
   const active = ranges.find((item) => item.key === range) || ranges[0]
 
   useEffect(() => {
-    const unsubscribe = onSnapshot(thresholdsDocRef, (snapshot) => {
-      if (!snapshot.exists()) {
-        setThresholds(defaultThresholds)
-        return
-      }
+    let cancelled = false
 
-      setThresholds(normalizeThresholds(snapshot.data().thresholds))
-    }, () => {
-      setThresholds(defaultThresholds)
-    })
+    loadTwentyFourHourSummary()
+      .then((docs) => {
+        if (cancelled) return
+        setTwentyFourHourReadings(docs)
+      })
+      .catch(() => {
+        if (cancelled) return
+        setTwentyFourHourReadings([])
+      })
 
-    return unsubscribe
-  }, [])
-
-  useEffect(() => {
-    const latestReadingRef = doc(db, 'sensor_readings', 'latest')
-
-    const unsubscribe = onSnapshot(latestReadingRef, (snapshot) => {
-      if (!snapshot.exists()) {
-        setLiveLatestReading(null)
-        return
-      }
-
-      setLiveLatestReading({ id: snapshot.id, ...snapshot.data() })
-    }, () => {
-      setLiveLatestReading(null)
-    })
-
-    return unsubscribe
-  }, [])
-
-  useEffect(() => {
-    const startDate = new Date(Date.now() - 24 * 60 * 60 * 1000)
-
-    const q = query(
-      collection(db, 'sensor_readings', 'logs', 'history'),
-      where('timestamp', '>=', Timestamp.fromDate(startDate)),
-      orderBy('timestamp', 'asc'),
-    )
-
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      setSummaryReadings(snapshot.docs.map((docSnapshot) => ({ id: docSnapshot.id, ...docSnapshot.data() })))
-    }, () => {
-      setSummaryReadings([])
-    })
-
-    return unsubscribe
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   useEffect(() => {
@@ -252,24 +220,10 @@ export default function AnalyticsTrends() {
 
     setRangeReadings([])
 
-    const now = new Date()
-    let startDate
-
-    if (range === '1h') startDate = new Date(now.getTime() - 1 * 60 * 60 * 1000)
-    else if (range === '24h') startDate = new Date(now.getTime() - 24 * 60 * 60 * 1000)
-    else if (range === '7d') startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
-    else startDate = new Date(0)
-
-    const q = query(
-      collection(db, 'sensor_readings', 'logs', 'history'),
-      where('timestamp', '>=', Timestamp.fromDate(startDate)),
-      orderBy('timestamp', 'asc'),
-    )
-
-    getDocs(q)
+    loadTrendWindow(range)
       .then((snapshot) => {
         if (cancelled) return
-        setRangeReadings(snapshot.docs.map((docSnapshot) => ({ id: docSnapshot.id, ...docSnapshot.data() })))
+        setRangeReadings(snapshot)
       })
       .catch(() => {
         if (cancelled) return
@@ -287,18 +241,20 @@ export default function AnalyticsTrends() {
   const tds = useMemo(() => buildSeries(rangeReadings, 'tds', active.points), [rangeReadings, active.points])
 
   const latestReading = useMemo(() => {
-    if (liveLatestReading) return liveLatestReading
-    if (summaryReadings.length > 0) return summaryReadings[summaryReadings.length - 1]
+    if (sharedLatestReading) return sharedLatestReading
     if (rangeReadings.length > 0) return rangeReadings[rangeReadings.length - 1]
     return null
-  }, [liveLatestReading, summaryReadings, rangeReadings])
+  }, [sharedLatestReading, rangeReadings])
 
   const dayWindow = useMemo(() => {
     const compute = (key) => {
-      if (summaryReadings.length < 2) return null
+      const firstSource = twentyFourHourReadings[0] || rangeReadings[0] || null
+      const lastSource = sharedLatestReading || twentyFourHourReadings[twentyFourHourReadings.length - 1] || rangeReadings[rangeReadings.length - 1] || null
 
-      const first = getReadingValue(summaryReadings[0], key)
-      const last = getReadingValue(summaryReadings[summaryReadings.length - 1], key)
+      if (!firstSource || !lastSource) return null
+
+      const first = getReadingValue(firstSource, key)
+      const last = getReadingValue(lastSource, key)
       if (first == null || last == null) return null
       return last - first
     }
@@ -309,7 +265,7 @@ export default function AnalyticsTrends() {
       waterTemperature: compute('waterTemperature'),
       tds: compute('tds'),
     }
-  }, [summaryReadings])
+  }, [twentyFourHourReadings, sharedLatestReading, rangeReadings])
 
   const metricConfig = useMemo(() => ([
     {

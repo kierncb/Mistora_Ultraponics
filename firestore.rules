@@ -1,17 +1,24 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Allow public read/write only for the single thresholds document
-    // Move thresholds to a dedicated `settings/thresholds` document.
     match /settings/thresholds {
       allow read, write: if true;
     }
 
-    // Allow reads for sensor readings and permit device writes to sensor documents
-    // Thresholds is already explicitly allowed above.
-    match /sensor_readings/{docId} {
+    // Live device state remains writable by the dashboard/device.
+    match /sensor_readings/latest {
+      allow read, write: if true;
+    }
+
+    // Raw sensor history is the source of truth for rollup generation.
+    match /sensor_readings/logs/history/{readingId} {
+      allow read, write: if true;
+    }
+
+    // Summary rollups are read-only from the client; Cloud Functions writes them.
+    match /sensor_readings/rollups/{window}/{bucketId} {
       allow read: if true;
-      allow write: if true; // allow ESP32 devices to write readings without auth
+      allow write: if false;
     }
 
     // Allow dashboard to record and read operational activity logs.
